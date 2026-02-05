@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast App</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-image: url("/images/0216d59652061c9705ca6818858cf602.jpg");
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-attachment: fixed;
+            background-size: cover;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 1200px; margin: auto; }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        h1 { font-size: 2.5em; }
+
+        .search-section {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.3);
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 30px;
+            border-radius: 8px;
+            border: none;
+            background: #667eea;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover { background: #5568d3; }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            min-height: 400px;
+        }
+
+        .tab-content.active { display: block; }
+
+        .weather-display { text-align: center; }
+
+        .temperature {
+            font-size: 4em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .weather-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .detail-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .forecast-day {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .hourly-forecast {
+            display: grid;
+            grid-template-columns: repeat(auto-fit,minmax(150px,1fr));
+            gap: 10px;
+        }
+
+        canvas { height: 500px !important; }
+
+        .loading, .placeholder {
+            text-align: center;
+            color: #666;
+            font-size: 1.3em;
+            padding: 40px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+    <h1>🌤️ Weather Forecast App</h1>
+    <p>Current weather, 5-day forecast & trends</p>
+</header>
+
+<div class="search-section">
+    <div class="search-box">
+        <input id="cityInput" placeholder="Enter city name">
+        <button onclick="searchWeather()">Search</button>
+    </div>
+
+    <div class="controls">
+        <div>
+            <label><input type="radio" name="units" value="metric" checked onchange="refreshWeather()"> °C</label>
+            <label><input type="radio" name="units" value="imperial" onchange="refreshWeather()"> °F</label>
+        </div>
+
+        <div>
+            <select id="favoritesSelect" onchange="loadFavorite()">
+                <option value="">Favorites</option>
+            </select>
+            <button onclick="addToFavorites()">Add</button>
+        </div>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="tab active" onclick="switchTab(0)">Current</button>
+    <button class="tab" onclick="switchTab(1)">Forecast</button>
+    <button class="tab" onclick="switchTab(2)">Dashboard</button>
+</div>
+
+<div id="currentTab" class="tab-content active placeholder">
+    Search for a city to view weather
+</div>
+
+<div id="forecastTab" class="tab-content placeholder">
+    Search for a city to view forecast
+</div>
+
+<div id="dashboardTab" class="tab-content">
+    <canvas id="chart"></canvas>
+    <div class="placeholder">Search for a city to view trends</div>
+</div>
+
+</div>
+
+<script>
+let currentCity = "";
+let favorites = JSON.parse(localStorage.getItem("weatherFavorites")) || [];
+let chart = null;
+
+updateFavorites();
+
+function getUnits() {
+    return document.querySelector('input[name="units"]:checked').value;
+}
+
+function switchTab(i) {
+    document.querySelectorAll(".tab").forEach((t,idx)=>t.classList.toggle("active",idx===i));
+    document.querySelectorAll(".tab-content").forEach((c,idx)=>c.classList.toggle("active",idx===i));
+}
+
+async function searchWeather() {
+    const city = cityInput.value.trim();
+    if (!city) return alert("Enter city name");
+    currentCity = city;
+
+    await Promise.all([
+        loadCurrent(city),
+        loadForecast(city),
+        loadDashboard(city)
+    ]);
+}
+
+async function loadCurrent(city) {
+    const el = currentTab;
+    el.innerHTML = `<div class="loading">Loading...</div>`;
+
+    try {
+        const res = await fetch(`/api/weather/current?city=${city}&units=${getUnits()}`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error);
+
+        el.innerHTML = `
+            <div class="weather-display">
+                <h2>${d.city}, ${d.country}</h2>
+                <img src="https://openweathermap.org/img/wn/${d.icon}@4x.png">
+                <div class="temperature">${Math.round(d.temperature)}°</div>
+                <div>${d.description}</div>
+
+                <div class="weather-details">
+                    <div class="detail-card">Feels Like<br><b>${d.feels_like}°</b></div>
+                    <div class="detail-card">Humidity<br><b>${d.humidity}%</b></div>
+                    <div class="detail-card">Wind<br><b>${d.wind_speed}</b></div>
+                    <div class="detail-card">Pressure<br><b>${d.pressure}</b></div>
+                    <div class="detail-card">Visibility<br><b>${d.visibility} km</b></div>
+                </div>
+            </div>`;
+    } catch (e) {
+        el.innerHTML = `<div class="error-message">${e.message}</div>`;
+    }
+}
+
+async function loadForecast(city) {
+    const el = forecastTab;
+    el.innerHTML = `<div class="loading">Loading forecast...</div>`;
+
+    try {
+        const res = await fetch(`/api/weather/forecast?city=${city}&units=${getUnits()}`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error);
+
+        let html = `<h2>${d.city} – 5 Day Forecast</h2>`;
+
+
+        if (!d.forecasts || typeof d.forecasts !== "object") {
+            el.innerHTML = `
+                <div class="error-message">
+                    Forecast data is unavailable or malformed.
+                </div>`;
+            return;
+        }
+
+        for (const [date, hours] of Object.entries(d.forecasts).slice(0, 5)) {
+
+             html += `
+                <div class="forecast-day">
+                    <div class="forecast-date">${date}</div>
+                    <div class="hourly-forecast">
+            `;
+
+
+
+            hours.slice(0,4).forEach(h=>{
+                html += `
+                    <div class="detail-card">
+                        ${h.time}<br>
+                        <img src="https://openweathermap.org/img/wn/${h.icon}@2x.png"><br>
+                        <b>${h.temperature}°</b><br>
+                        ${h.description}
+                    </div>`;
+            });
+
+            html += `</div></div>`;
+        }
+
+        el.innerHTML = html;
+    } catch (e) {
+        el.innerHTML = `<div class="error-message">${e.message}</div>`;
+    }
+}
+
+async function loadDashboard(city) {
+    const res = await fetch(`/api/weather/dashboard?city=${city}&units=${getUnits()}`);
+    const d = await res.json();
+    if (!res.ok) return;
+
+    if (chart) chart.destroy();
+
+    chart = new Chart(chartCtx(), {
+        type: "line",
+        data: {
+            labels: d.timestamps.map(t=>new Date(t).toLocaleString()),
+            datasets: [
+                { label: "Temp", data: d.temperatures, borderWidth: 2 },
+                { label: "Humidity", data: d.humidity, borderWidth: 2 },
+                { label: "Wind", data: d.wind_speeds, borderWidth: 2 }
+            ]
+        }
+    });
+
+    dashboardTab.querySelector(".placeholder")?.remove();
+}
+
+function chartCtx() {
+    return document.getElementById("chart").getContext("2d");
+}
+
+function refreshWeather() {
+    if (currentCity) searchWeather();
+}
+
+function addToFavorites() {
+    if (!currentCity || favorites.includes(currentCity)) return;
+    favorites.push(currentCity);
+    localStorage.setItem("weatherFavorites", JSON.stringify(favorites));
+    updateFavorites();
+}
+
+function updateFavorites() {
+    favoritesSelect.innerHTML = `<option value="">Favorites</option>`;
+    favorites.forEach(c=>{
+        const o=document.createElement("option");
+        o.value=c; o.textContent=c;
+        favoritesSelect.appendChild(o);
+    });
+}
+
+function loadFavorite() {
+    if (favoritesSelect.value) {
+        cityInput.value = favoritesSelect.value;
+        searchWeather();
+    }
+}
+</script>
+
+</body>
+</html>
