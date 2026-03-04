@@ -194,7 +194,7 @@ if __name__ == '__main__':
     print("\n" + "="*50)
     print("Weather Forecast API Server")
     print("="*50)
-    print("Server starting on http://localhost:5000")
+    print("Server starting on http://localhost:5090")
     print("\nAvailable endpoints:")
     print("  - GET  /                                                    (Main Web Interface)")
     print("  - GET  /api/health")
@@ -203,5 +203,7 @@ if __name__ == '__main__':
     print("  - GET  /api/weather/dashboard?city=<city>&units=<metric|imperial>")
     print("\nPress CTRL+C to stop the server")
     print("="*50 + "\n")
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+    port = int(os.environ.get("PORT", 5090))
+    app.run(debug=True,use_reloader=True,host="0.0.0.0", port=port)
