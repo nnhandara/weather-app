@@ -4,7 +4,7 @@ from flask_cors import CORS
 import requests
 from datetime import datetime
 
-from sklearn.base import defaultdict
+from collections import defaultdict
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
